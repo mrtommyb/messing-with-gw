@@ -10,7 +10,7 @@ class Gwtess():
     def __init__(self, tesspath, spectrapath):
         self.read_bandpass(tesspath)
         self.read_obs_spectra(spectrapath)
-        self.obs_distance = 40.E6  # 40 Mpc
+        self.obs_distance = 41.E6  # 41 Mpc Hjorth et al. 2017
 
         self.time = [0.49, 0.53, 1.46, 2.49, 3.46, 4.51, 7.45, 8.46]
 
