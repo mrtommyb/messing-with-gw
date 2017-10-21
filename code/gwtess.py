@@ -3,16 +3,22 @@ import matplotlib.pyplot as plt
 import scipy.integrate as integrate
 from scipy.interpolate import interp1d
 import glob
+from scipy.special import gammainc
 
 
 class Gwtess():
 
-    def __init__(self, tesspath, spectrapath):
+    def __init__(self, tesspath, spectrapath, spectime, obs_distance=41.E6,
+                 mergerrate=1540, limitingmag=18.4,
+                 skycoverage=0.041):
         self.read_bandpass(tesspath)
         self.read_obs_spectra(spectrapath)
-        self.obs_distance = 41.E6  # 41 Mpc Hjorth et al. 2017
+        self.obs_distance = obs_distance
+        self.limitingmag = limitingmag
+        self.skycoverage = skycoverage
 
-        self.time = [0.49, 0.53, 1.46, 2.49, 3.46, 4.51, 7.45, 8.46]
+        self.time = spectime
+        self.mergerrate = mergerrate
 
     def read_bandpass(self, path):
         self.tess_nm, self.tess_qe = np.genfromtxt(path,
@@ -86,6 +92,37 @@ class Gwtess():
         mag_interp = interp1d(mag_level, noise_level,
                               kind='cubic', fill_value='extrapolate')
         return mag_interp(mag)
+
+    def get_snr(self, mag, exposure=0.5):
+        noise = self.TESS_noise_1h(mag)
+        snr = 1.E6 / (noise / np.sqrt(exposure))
+        return snr
+
+    def get_distances(self, years=10):
+        # draw from a sphere
+        # we want the volume to be 1 Gpc, so
+        r = (1. / ((4 / 3) * np.pi))**(1 / 3)
+        ndim = 3
+        center=[0, 0, 0]
+        x = np.random.normal(size=(self.mergerrate, 3))
+        ssq = np.sum(x**2, axis=1)
+        fr = r * gammainc(ndim / 2, ssq / 2)**(1 / ndim) / np.sqrt(ssq)
+        frtiled = np.tile(fr.reshape(self.mergerrate, 1), (1, ndim))
+        p = center + np.multiply(x, frtiled)
+        distances = np.sqrt(p.T[0]**2 + p.T[1]**2 + p.T[2]**2)
+        self.distances = distances
+
+    def interp_obs(self):
+        mag = get_obs_absmag()
+        f5 = interp1d(self.time, mag, kind='cubic',
+                      bounds_error=False,
+                      fill_value='extrapolate')
+
+    def is_detectable(self,):
+
+
+
+
 
 
 if '__name__' == '__main__':
