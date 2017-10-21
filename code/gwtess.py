@@ -1,5 +1,5 @@
 import numpy as np
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import scipy.integrate as integrate
 from scipy.interpolate import interp1d
 import glob
@@ -103,25 +103,77 @@ class Gwtess():
         # we want the volume to be 1 Gpc, so
         r = (1. / ((4 / 3) * np.pi))**(1 / 3)
         ndim = 3
-        center=[0, 0, 0]
+        center = [0, 0, 0]
         x = np.random.normal(size=(self.mergerrate, 3))
         ssq = np.sum(x**2, axis=1)
         fr = r * gammainc(ndim / 2, ssq / 2)**(1 / ndim) / np.sqrt(ssq)
         frtiled = np.tile(fr.reshape(self.mergerrate, 1), (1, ndim))
         p = center + np.multiply(x, frtiled)
         distances = np.sqrt(p.T[0]**2 + p.T[1]**2 + p.T[2]**2)
-        self.distances = distances
+        self.distances = distances * 1.E9
 
-    def interp_obs(self):
-        mag = get_obs_absmag()
-        f5 = interp1d(self.time, mag, kind='cubic',
-                      bounds_error=False,
-                      fill_value='extrapolate')
+    def interp_obs(self, interptime):
+        self.obsmag = self.get_obs_absmag()
+        self._f5 = interp1d(self.time, self.obsmag, kind='cubic',
+                            bounds_error=False,
+                            fill_value='extrapolate')
+        return self._f5(interptime)
 
-    def is_detectable(self,):
+    def is_detectable(self, apmag):
+        return np.where(apmag < self.limitingmag)
 
+    def sim_events(self, fixedlum=True, years=10):
+        self.get_distances(years=years)
+        if fixedlum:
+            apmags, detected = self.fixedlumsim()
+        elif not fixedlum:
+            apmags, detected = self.variablelumsim()
 
+        return apmags, detected
 
+    def fixedlumsim(self):
+        interptime = np.arange(0, 3, 0.1)
+        maxbrightness = np.min(self.interp_obs(interptime))
+
+        apmags = self.get_apmag(maxbrightness, self.distances)
+
+        detected = self.is_detectable(apmags)
+
+        return apmags, detected
+
+    def variablelumsim(self):
+        interptime = np.arange(0, 3, 0.1)
+        maxbrightness = np.min(self.interp_obs(interptime))
+        
+        size = self.distances.shape[0]
+
+        #about 9.4% are on axis
+        mod_on = self.get_onaxis(size)
+        mod_off = self.get_offaxis(size)
+        rand = np.random.sample(size=size)
+        mod = np.where(rand < 0.094, mod_on, mod_off)
+        magmod = - 2.5 * np.log10(mod)
+        absmag_mod = maxbrightness + magmod
+
+        apmags = self.get_apmag(absmag_mod, self.distances)
+
+        detected = self.is_detectable(apmags)
+
+        return apmags, detected
+
+    def get_onaxis(self, size):
+        # range from 3x as bright to 130x as bright
+        # distributed uniformly in log space
+        low = 1.1  # x3 in log_e
+        high = 4.9  # x130 in log_e
+        return np.exp(np.random.uniform(low, high, size))
+
+    def get_offaxis(self, size):
+        # range from half as bright to 10x as bright
+        # distributed uniformly in log space
+        low = -1.2  # x0.3 in log_e
+        high = 2.6  # x13 in log_e
+        return np.exp(np.random.uniform(low, high, size))
 
 
 
