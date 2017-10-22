@@ -104,10 +104,10 @@ class Gwtess():
         r = (1. / ((4 / 3) * np.pi))**(1 / 3)
         ndim = 3
         center = [0, 0, 0]
-        x = np.random.normal(size=(self.mergerrate, 3))
+        x = np.random.normal(size=(self.mergerrate * years, 3))
         ssq = np.sum(x**2, axis=1)
         fr = r * gammainc(ndim / 2, ssq / 2)**(1 / ndim) / np.sqrt(ssq)
-        frtiled = np.tile(fr.reshape(self.mergerrate, 1), (1, ndim))
+        frtiled = np.tile(fr.reshape(self.mergerrate * years, 1), (1, ndim))
         p = center + np.multiply(x, frtiled)
         distances = np.sqrt(p.T[0]**2 + p.T[1]**2 + p.T[2]**2)
         self.distances = distances * 1.E9
@@ -126,10 +126,12 @@ class Gwtess():
         self.get_distances(years=years)
         if fixedlum:
             apmags, detected = self.fixedlumsim()
+            returnitems = [apmags, detected]
         elif not fixedlum:
-            apmags, detected = self.variablelumsim()
+            apmags, detected, is_onaxis = self.variablelumsim()
+            returnitems = [apmags, detected, is_onaxis]
 
-        return apmags, detected
+        return returnitems
 
     def fixedlumsim(self):
         interptime = np.arange(0, 3, 0.1)
@@ -151,7 +153,8 @@ class Gwtess():
         mod_on = self.get_onaxis(size)
         mod_off = self.get_offaxis(size)
         rand = np.random.sample(size=size)
-        mod = np.where(rand < 0.094, mod_on, mod_off)
+        is_onaxis = rand < 0.0075
+        mod = np.where(is_onaxis, mod_on, mod_off)
         magmod = - 2.5 * np.log10(mod)
         absmag_mod = maxbrightness + magmod
 
@@ -159,7 +162,7 @@ class Gwtess():
 
         detected = self.is_detectable(apmags)
 
-        return apmags, detected
+        return apmags, detected, is_onaxis
 
     def get_onaxis(self, size):
         # range from 3x as bright to 130x as bright
