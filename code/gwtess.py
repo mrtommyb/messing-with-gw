@@ -100,14 +100,16 @@ class Gwtess():
 
     def get_distances(self, years=10):
         # draw from a sphere
-        # we want the volume to be 1 Gpc, so
-        r = (1. / ((4 / 3) * np.pi))**(1 / 3)
+        # we want the volume to be 10 Gpc, so
+        vol = 10
+        r = (vol / ((4 / 3) * np.pi))**(1 / 3)
         ndim = 3
         center = [0, 0, 0]
-        x = np.random.normal(size=(self.mergerrate * years, 3))
+        nmergers = self.mergerrate * vol
+        x = np.random.normal(size=(nmergers * years, 3))
         ssq = np.sum(x**2, axis=1)
         fr = r * gammainc(ndim / 2, ssq / 2)**(1 / ndim) / np.sqrt(ssq)
-        frtiled = np.tile(fr.reshape(self.mergerrate * years, 1), (1, ndim))
+        frtiled = np.tile(fr.reshape(nmergers * years, 1), (1, ndim))
         p = center + np.multiply(x, frtiled)
         distances = np.sqrt(p.T[0]**2 + p.T[1]**2 + p.T[2]**2)
         self.distances = distances * 1.E9
@@ -177,6 +179,11 @@ class Gwtess():
         low = -1.2  # x0.3 in log_e
         high = 2.6  # x13 in log_e
         return np.exp(np.random.uniform(low, high, size))
+
+    def get_yerr_mag(self, mag, integration=0.5):
+        noise = self.TESS_noise_1h(mag)/1.E6 / np.sqrt(integration)
+        yerr = np.log10(1.0 - (noise)) / -0.4
+        return yerr
 
 
 
