@@ -6,11 +6,11 @@ import glob
 from scipy.special import gammainc
 
 
-class Gwtess():
+class Gwtess:
 
     def __init__(self, tesspath, spectrapath, spectime, obs_distance=41.E6,
                  mergerrate=1540, limitingmag=18.4,
-                 skycoverage=0.041):
+                 skycoverage=0.041,):
         self.read_bandpass(tesspath)
         self.read_obs_spectra(spectrapath)
         self.obs_distance = obs_distance
@@ -122,7 +122,7 @@ class Gwtess():
         return self._f5(interptime)
 
     def is_detectable(self, apmag):
-        return np.where(apmag < self.limitingmag)
+        return apmag < self.limitingmag
 
     def sim_events(self, fixedlum=True, years=10):
         self.get_distances(years=years)
@@ -148,14 +148,14 @@ class Gwtess():
     def variablelumsim(self):
         interptime = np.arange(0, 3, 0.1)
         maxbrightness = np.min(self.interp_obs(interptime))
-        
+
         size = self.distances.shape[0]
 
-        #about 9.4% are on axis
+        # about 3.9% are on axis
         mod_on = self.get_onaxis(size)
         mod_off = self.get_offaxis(size)
         rand = np.random.sample(size=size)
-        is_onaxis = rand < 0.0075
+        is_onaxis = rand < 0.039
         mod = np.where(is_onaxis, mod_on, mod_off)
         magmod = - 2.5 * np.log10(mod)
         absmag_mod = maxbrightness + magmod
@@ -181,10 +181,107 @@ class Gwtess():
         return np.exp(np.random.uniform(low, high, size))
 
     def get_yerr_mag(self, mag, integration=0.5):
-        noise = self.TESS_noise_1h(mag)/1.E6 / np.sqrt(integration)
+        noise = self.TESS_noise_1h(mag) / 1.E6 / np.sqrt(integration)
         yerr = np.log10(1.0 - (noise)) / -0.4
         return yerr
 
+
+
+class Gwtess_galaxy(Gwtess):
+
+    def __init__(self, tesspath, spectrapath, spectime,
+                 obs_distance=41.E6,
+                 mergerrate=1540,
+                 skycoverage=0.041, ):
+        super().__init__(tesspath, spectrapath, spectime,
+                         obs_distance=41.E6,
+                         mergerrate=1540, limitingmag=None,
+                         skycoverage=0.041, )
+        # self.read_galaxy(galaxypath)
+
+    def is_detectable_with_galaxy(self, apmag, galaxymag,
+                                  integration=6., sigma=5.):
+
+        noise_no_gal = self.TESS_noise_1h(apmag) / 1.E6 / np.sqrt(integration)
+        gal_noise = self.get_photon_noise(apmag, galaxymag)
+        sigmalevel = 1. / np.sqrt((noise_no_gal)**2 + gal_noise**2)
+
+        return sigmalevel > sigma
+
+    def get_photon_noise(self, apmag_noise, apmag_target):
+        # equation for photons for tess
+        # from sullivan 2015
+        photons_0mag = (1.514E6 * 69.1 * 3600)
+        y = photons_0mag * 10**(-0.4 * apmag_noise)
+        z = np.sqrt(y) / (photons_0mag * 10**(-0.4 * apmag_target))
+        return z
+
+    def variablelumsim(self):
+        interptime = np.arange(0, 3, 0.1)
+        maxbrightness = np.min(self.interp_obs(interptime))
+
+        size = self.distances.shape[0]
+
+        mod_on = self.get_onaxis(size)
+        mod_off = self.get_offaxis(size)
+        rand = np.random.sample(size=size)
+        is_onaxis = rand < 0.039
+        mod = np.where(is_onaxis, mod_on, mod_off)
+        magmod = - 2.5 * np.log10(mod)
+        absmag_mod = maxbrightness + magmod
+
+        apmags = self.get_apmag(absmag_mod, self.distances)
+
+        self.galaxy_apmags = self.get_galaxy_apmag(self.distances)
+
+        detected = self.is_detectable_with_galaxy(apmags, self.galaxy_apmags)
+
+        return apmags, detected, is_onaxis
+
+    def get_galaxy_apmag(self, distances):
+        galaxy_absmag = np.random.normal(-20.9, 1.0, 
+            size=np.shape(distances)[0])
+        galaxy_apmag = self.get_apmag(galaxy_absmag, distances)
+        return galaxy_apmag
+
+    def get_yerr_mag(self, mag, integration=0.5):
+        noise_no_gal = self.TESS_noise_1h(apmag) / 1.E6 / np.sqrt(integration)
+        gal_noise = self.get_photon_noise(apmag, galaxymag)
+        noise = np.sqrt((noise_no_gal)**2 + gal_noise**2)
+        yerr = np.log10(1.0 - (noise)) / -0.4
+        return yerr
+
+
+#     def read_galaxy(self, path):
+#         self.galaxy_ang, self.galaxy_f_mjy = np.genfromtxt(path,
+#                                                            delimiter=',',
+#                                                            unpack=True)
+#         self.galaxy_f_jy = self.galaxy_f_mjy * 1.E-3
+#         tess_qe_interp = self._f2(self.galaxy_ang)
+#         galaxy_f_jy_tess = tess_qe_interp * self.galaxy_f_jy
+
+#         self._f6 = interp1d(self.galaxy_ang, galaxy_f_jy_tess, kind='slinear',
+#                             bounds_error=True)
+#         integral = (
+#             integrate.quad(
+#                 self._f6, 4000, 12000, limit=500)[0] /
+#             (integrate.quad(
+#                 self._f2, 4000, 12000, limit=500)[0] * 3631))
+#         self.gal_obs_mag = - (5 / 2) * np.log10(integral)
+
+#     def get_gal_obs_absmag(self):
+#         m = self.gal_obs_mag
+#         absM = self.get_absmag(m, self.obs_distance)
+#         return absM
+
+#     def gal_noise_term(self, distance):
+#         absM = self.get_gal_obs_absmag()
+#         apM = self.get_apmag(self, absM, distance)
+#         # equations for photoncounts from sullivan 2015
+#         ph0 = (1.514E6 * 70 * 3600) # for 1 hour integration
+#         phgal= x * 10**(-0.4 * apM)
+#         z = np.sqrt(y) / (x * 10**(-0.4*17.3))
+#         noiseterm = ph0
 
 
 if '__name__' == '__main__':
