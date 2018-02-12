@@ -23,7 +23,9 @@ class Gwtess:
     def read_bandpass(self, path):
         self.tess_nm, self.tess_qe = np.genfromtxt(path,
                                                    delimiter=',', unpack=True)
+        self.tess_nm, self.tess_qe = self.tess_nm[::-1], self.tess_qe[::-1]
         self.tess_ang = self.tess_nm * 10
+
         self._f2 = interp1d(self.tess_ang, self.tess_qe, kind='slinear',
                             bounds_error=False, fill_value=0)
 
@@ -192,12 +194,13 @@ class Gwtess_galaxy(Gwtess):
     def __init__(self, tesspath, spectrapath, spectime,
                  obs_distance=41.E6,
                  mergerrate=1540,
-                 skycoverage=0.041, ):
+                 skycoverage=0.041, integration=6.0):
         super().__init__(tesspath, spectrapath, spectime,
-                         obs_distance=41.E6,
-                         mergerrate=1540, limitingmag=None,
-                         skycoverage=0.041, )
+                         obs_distance=obs_distance,
+                         mergerrate=mergerrate, limitingmag=None,
+                         skycoverage=skycoverage, )
         # self.read_galaxy(galaxypath)
+        self.integration = integration
 
     def is_detectable_with_galaxy(self, apmag, galaxymag,
                                   integration=6., sigma=5.):
@@ -234,7 +237,8 @@ class Gwtess_galaxy(Gwtess):
 
         self.galaxy_apmags = self.get_galaxy_apmag(self.distances)
 
-        detected = self.is_detectable_with_galaxy(apmags, self.galaxy_apmags)
+        detected = self.is_detectable_with_galaxy(apmags, self.galaxy_apmags,
+            integration=self.integration)
 
         return apmags, detected, is_onaxis
 
@@ -244,10 +248,10 @@ class Gwtess_galaxy(Gwtess):
         galaxy_apmag = self.get_apmag(galaxy_absmag, distances)
         return galaxy_apmag
 
-    def get_yerr_mag(self, mag, integration=0.5):
-        noise_no_gal = self.TESS_noise_1h(apmag) / 1.E6 / np.sqrt(integration)
-        gal_noise = self.get_photon_noise(apmag, galaxymag)
-        noise = np.sqrt((noise_no_gal)**2 + gal_noise**2)
+    def get_yerr_mag(self, mag, galaxymag, integration=0.5):
+        noise_no_gal = self.TESS_noise_1h(mag) / 1.E6 / np.sqrt(integration)
+        gal_noise = self.get_photon_noise(galaxymag, mag) / np.sqrt(integration)
+        noise = np.sqrt((noise_no_gal)**2 + gal_noise**2) 
         yerr = np.log10(1.0 - (noise)) / -0.4
         return yerr
 
